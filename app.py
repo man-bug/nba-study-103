@@ -35,12 +35,24 @@ def get_player_stats(player_id, season='2023-24'):
 
 # Streamlit app
 def main():
-    st.title("NBA Player Field Goal Percentage")
+    st.title("NBA Player Statistics Viewer")
 
     player_name_input = st.text_input("Enter a player name:")
+    stat_options = ['Field Goal Percentage', 'Points Per Game', 'Assists Per Game', 'Rebounds Per Game', 'Steals Per Game', 'Blocks Per Game']
+    selected_stat = st.selectbox("Select a stat to display:", stat_options)
+
+    # Mapping stat options to corresponding DataFrame columns
+    stat_mapping = {
+        'Field Goal Percentage': 'FG_PCT',
+        'Points Per Game': 'PTS',
+        'Assists Per Game': 'AST',
+        'Rebounds Per Game': 'REB',
+        'Steals Per Game': 'STL',
+        'Blocks Per Game': 'BLK'
+    }
 
     # Initialize variables to store player data
-    field_goal_pct = None
+    stat_value = None
     player_name = None
 
     if player_name_input:
@@ -52,17 +64,18 @@ def main():
 
                 if player_stats is not None and not player_stats.empty:
                     player_name = player_name_input
-                    field_goal_pct = player_stats['FG_PCT'].values[0]
+                    stat_column = stat_mapping[selected_stat]
+                    stat_value = player_stats[stat_column].values[0]
         else:
             st.write(f"Player {player_name_input} not found.")
 
-    # Create and display the Plotly chart for field goal percentage
-    if player_name and field_goal_pct is not None:
+    # Create and display the Plotly chart for the selected statistic
+    if player_name and stat_value is not None:
         fig = go.Figure(data=[go.Indicator(
             mode="number+gauge",
-            value=field_goal_pct * 100,
-            title={'text': "Field Goal Percentage"},
-            gauge={'axis': {'range': [None, 100]},
+            value=stat_value if selected_stat != 'Field Goal Percentage' else stat_value * 100,
+            title={'text': selected_stat},
+            gauge={'axis': {'range': [None, 100 if selected_stat == 'Field Goal Percentage' else max(stat_value, 50)]},
                    'bar': {'color': "darkblue"},
                    'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 50}})])
 
