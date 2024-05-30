@@ -72,9 +72,7 @@ def main():
                             title={'text': selected_stat},
                             gauge={'axis': {'range': [None, 100 if selected_stat == 'Field Goal Percentage' else max(stat_value, 50)]},
                                    'bar': {'color': "darkblue"},
-                                   'threshold': {'line': {'color': "red", 'width': 4, 'valuefont': {'color': "red"}},  # Adjust value font color
-                                                 'thickness': 0.75, 
-                                                 'value': stat_value}})])
+                                   'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 50}})])
                         st.plotly_chart(fig)
         else:
             st.write(f"Player {player_name_input} not found.")
