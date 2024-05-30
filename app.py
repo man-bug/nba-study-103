@@ -46,13 +46,6 @@ def display_player_headshot(player_id, player_name):
     else:
         st.write(f"Could not retrieve headshot for {player_name}.")
 
-# Function to get team colors
-def get_team_colors(team_id):
-    team_info = teams.find_team_name_by_id(team_id)
-    primary_color = team_info['primary_color'] if 'primary_color' in team_info else '#FFFFFF'
-    secondary_color = team_info['secondary_color'] if 'secondary_color' in team_info else '#000000'
-    return primary_color, secondary_color
-
 # Function to get team roster
 def get_team_roster(team_id):
     try:
@@ -72,20 +65,6 @@ def main():
 
     if selected_team:
         team_id = next(team['id'] for team in teams.get_teams() if team['full_name'] == selected_team)
-        primary_color, secondary_color = get_team_colors(team_id)
-
-        # Set the background color
-        st.markdown(
-            f"""
-            <style>
-            .stApp {{
-                background-color: {primary_color};
-                color: {secondary_color};
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
 
         # Dropdown for player selection
         team_roster = get_team_roster(team_id)
