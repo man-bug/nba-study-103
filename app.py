@@ -3,7 +3,6 @@ import plotly.graph_objects as go
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo
 from nba_api.stats.static import players
 import logging
-import os
 import requests
 from PIL import Image
 from io import BytesIO
