@@ -1,5 +1,5 @@
-nba_api
-plotly
-streamlit
-tenacity
-PIL
+streamlit==0.91.1
+plotly==5.2.1
+nba-api-client==1.1.9
+requests==2.26.0
+Pillow==8.4.0
