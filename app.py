@@ -1,7 +1,9 @@
 import streamlit as st
 import plotly.graph_objects as go
-from nba_api.stats.endpoints import playercareerstats, leaguestandings, commonplayerinfo
-from nba_api.stats.static import players, teams
+from nba_api.stats.endpoints import playercareerstats, commonplayerinfo
+from nba_api.stats.static import players
+from requests.exceptions import ReadTimeout
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Function to get player ID by name
 def get_player_id(player_name):
@@ -9,20 +11,20 @@ def get_player_id(player_name):
     player_dict = {player['full_name']: player for player in nba_players}
     return player_dict.get(player_name, {}).get('id')
 
-# Function to get player info
-def get_player_info(player_id):
-    player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id)
+# Retry settings: retry up to 3 times with a 5 second wait between attempts
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
+def fetch_player_info(player_id):
+    player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id, timeout=20)
     return player_info.get_data_frames()[0]
 
-# Function to get team members
-def get_team_members(team_id):
-    team_players = players.get_players()
-    return [player for player in team_players if player['team_id'] == team_id]
-
-# Function to get all-star players
-def get_all_star_players():
-    all_star_players = players.get_players()
-    return [player for player in all_star_players if player['is_all_star']]
+# Function to get player info
+def get_player_info(player_id):
+    try:
+        player_info = fetch_player_info(player_id)
+        return player_info
+    except ReadTimeout:
+        st.error(f"Request timed out while fetching data for player ID: {player_id}")
+        return None
 
 # Function to fetch player stats
 def get_player_stats(player_id, season='2023-24'):
@@ -33,59 +35,59 @@ def get_player_stats(player_id, season='2023-24'):
 # Streamlit app
 st.title("NBA Player Visualization and Prediction")
 
-# User input for player names
-player_names_input = st.text_input("Enter three player names separated by commas").split(',')
+# User input for player name
+player_name_input = st.text_input("Enter a player name")
 
 # User input for toggle options
-toggle_option = st.selectbox("Select visualization type", ["Points-Per-Game (PPG)", "Rebounds-Per-Game (RPG)", "Individual Scores", "Field Goals", "Age of Players", "All Star Scores"])
+toggle_option = st.selectbox("Select visualization type", ["Points-Per-Game (PPG)", "Rebounds-Per-Game (RPG)", "Individual Scores", "Field Goals", "Age of Player", "All Star Scores"])
 
-# Initialize lists to store player data
-ppg_values = []
-rpg_values = []
-individual_scores = []
-field_goals = []
-ages = []
-all_star_scores = []
-player_names = []
+# Initialize variables to store player data
+ppg_value = 0
+rpg_value = 0
+individual_score = 0
+field_goal = 0
+age = None
+all_star_score = 0
+player_name = None
 
-for player_name in player_names_input:
-    player_name = player_name.strip()
-    player_id = get_player_id(player_name)
+if player_name_input:
+    player_id = get_player_id(player_name_input.strip())
     if player_id:
         player_info = get_player_info(player_id)
-        player_stats = get_player_stats(player_id)
-        
-        if not player_stats.empty:
-            player_names.append(player_name)
-            ppg_values.append(player_stats['PTS'].values[0])
-            rpg_values.append(player_stats['REB'].values[0])
-            individual_scores.append(player_stats['PTS'].values[0])
-            field_goals.append(player_stats['FGM'].values[0])
-            ages.append(player_info['BIRTHDATE'].values[0])
-            if player_info['is_all_star']:
-                all_star_scores.append(player_stats['PTS'].values[0])
+        if player_info is not None:
+            player_stats = get_player_stats(player_id)
+            
+            if not player_stats.empty:
+                player_name = player_name_input
+                ppg_value = player_stats['PTS'].values[0]
+                rpg_value = player_stats['REB'].values[0]
+                individual_score = player_stats['PTS'].values[0]
+                field_goal = player_stats['FGM'].values[0]
+                age = player_info['BIRTHDATE'].values[0]
+                if player_info['IS_ALL_STAR'].values[0]:
+                    all_star_score = player_stats['PTS'].values[0]
     else:
-        st.warning(f"Player {player_name} not found.")
+        st.warning(f"Player {player_name_input} not found.")
 
 # Create graphs based on toggle option
-if player_names:
+if player_name:
     if toggle_option == "Points-Per-Game (PPG)":
-        fig = go.Figure(data=[go.Bar(name='PPG', x=player_names, y=ppg_values)])
+        fig = go.Figure(data=[go.Bar(name='PPG', x=[player_name], y=[ppg_value])])
     elif toggle_option == "Rebounds-Per-Game (RPG)":
-        fig = go.Figure(data=[go.Bar(name='RPG', x=player_names, y=rpg_values)])
+        fig = go.Figure(data=[go.Bar(name='RPG', x=[player_name], y=[rpg_value])])
     elif toggle_option == "Individual Scores":
-        fig = go.Figure(data=[go.Bar(name='Individual Scores', x=player_names, y=individual_scores)])
+        fig = go.Figure(data=[go.Bar(name='Individual Scores', x=[player_name], y=[individual_score])])
     elif toggle_option == "Field Goals":
-        fig = go.Figure(data=[go.Bar(name='Field Goals', x=player_names, y=field_goals)])
-    elif toggle_option == "Age of Players":
-        fig = go.Figure(data=[go.Bar(name='Ages', x=player_names, y=ages)])
+        fig = go.Figure(data=[go.Bar(name='Field Goals', x=[player_name], y=[field_goal])])
+    elif toggle_option == "Age of Player":
+        fig = go.Figure(data=[go.Bar(name='Age', x=[player_name], y=[age])])
     elif toggle_option == "All Star Scores":
-        fig = go.Figure(data=[go.Bar(name='All Star Scores', x=player_names, y=all_star_scores)])
+        fig = go.Figure(data=[go.Bar(name='All Star Scores', x=[player_name], y=[all_star_score])])
 
     # Add title and labels
     fig.update_layout(
-        title=f'Player {toggle_option} Comparison 23-24 Season',
-        xaxis_title='Players',
+        title=f'{toggle_option} for {player_name} in the 23-24 Season',
+        xaxis_title='Player',
         yaxis_title=toggle_option,
         barmode='group'
     )
@@ -93,5 +95,4 @@ if player_names:
     # Display the chart
     st.plotly_chart(fig)
 else:
-    st.info("Please enter at least one valid player name.")
-
+    st.info("Please enter a valid player name.")
