@@ -3,6 +3,10 @@ import plotly.graph_objects as go
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo
 from nba_api.stats.static import players
 import logging
+import os
+import requests
+from PIL import Image
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +36,16 @@ def get_player_stats(player_id, season='2023-24'):
     except Exception as e:
         logger.error(f"Error fetching player stats: {e}")
         return None
+
+# Function to fetch and display player headshot
+def display_player_headshot(player_id, player_name):
+    url = f"https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/{player_id}.png"
+    response = requests.get(url)
+    if response.status_code == 200:
+        image = Image.open(BytesIO(response.content))
+        st.image(image, caption=player_name, use_column_width=False)
+    else:
+        st.write(f"Could not retrieve headshot for {player_name}.")
 
 # Streamlit app
 def main():
@@ -63,6 +77,7 @@ def main():
 
                 if player_stats is not None and not player_stats.empty:
                     player_name = player_name_input
+                    display_player_headshot(player_id, player_name)
                     for selected_stat in selected_stats:
                         stat_column = stat_mapping[selected_stat]
                         stat_value = player_stats[stat_column].values[0]
@@ -72,9 +87,7 @@ def main():
                             title={'text': selected_stat},
                             gauge={'axis': {'range': [None, 100 if selected_stat == 'Field Goal Percentage' else max(stat_value, 50)]},
                                    'bar': {'color': "darkblue"},
-                                   'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 50},
-                                   'hoverinfo': 'value'
-                            })])
+                                   'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 50}})])
                         st.plotly_chart(fig)
         else:
             st.write(f"Player {player_name_input} not found.")
