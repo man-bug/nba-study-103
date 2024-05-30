@@ -24,4 +24,4 @@ This project utilizes `nba_api` and `Plotly` to create a visualization and predi
 1. **Clone the repository**:
    ```sh
    git clone https://github.com/man-bug/nba-study-103.git
-   cd app.py
+   streamlit run app.py
