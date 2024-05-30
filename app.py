@@ -66,8 +66,15 @@ def main():
                     for selected_stat in selected_stats:
                         stat_column = stat_mapping[selected_stat]
                         stat_value = player_stats[stat_column].values[0]
-                        fig = go.Figure(data=[go.Box(y=player_stats[stat_column], name=selected_stat)])
-                        fig.update_layout(title=f"{selected_stat} Distribution for {player_name}")
+                        fig = go.Figure(data=[go.Indicator(
+                            mode="number+gauge",
+                            value=stat_value if selected_stat != 'Field Goal Percentage' else stat_value * 100,
+                            title={'text': selected_stat},
+                            gauge={'axis': {'range': [None, 100 if selected_stat == 'Field Goal Percentage' else max(stat_value, 50)]},
+                                   'bar': {'color': "darkblue"},
+                                   'threshold': {'line': {'color': "red", 'width': 4, 'valuefont': {'color': "red"}},  # Adjust value font color
+                                                 'thickness': 0.75, 
+                                                 'value': stat_value}})])
                         st.plotly_chart(fig)
         else:
             st.write(f"Player {player_name_input} not found.")
@@ -77,4 +84,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
