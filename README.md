@@ -9,6 +9,10 @@ This project utilizes `nba_api` and `Plotly` to create a visualization and predi
 - Interactive user interface with Streamlit
 - Scalable to include data from various NBA teams and seasons
 
+## Live Demo
+
+- [Our app](https://nba-study-103.streamlit.app): A live demo of our app 
+
 ## Tools and Libraries
 
 - [nba_api](https://github.com/swar/nba_api): An API for accessing NBA data
