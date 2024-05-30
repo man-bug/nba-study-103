@@ -2,5 +2,4 @@ nba_api
 plotly
 streamlit
 tenacity
-Pillow
-io
+PIL
