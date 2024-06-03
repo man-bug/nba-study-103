@@ -152,11 +152,9 @@ def main():
                             plot_stats([ppg1, fg_percentage1, apg1, rpg1], list(league_averages), selected_player1, "League Average")
                         else:
                             st.write("Error fetching league averages.")
-
-                        st.write(f"Shot Chart for {selected_player1}")
+                            
                         plot_shot_chart(player_id1, selected_player1)
-
-                        st.write(f"Shot Chart for {selected_player2}")
+                        
                         plot_shot_chart(player_id2, selected_player2)
                     else:
                         st.write(f"Error fetching team stats: {team_stats1[1]}")
