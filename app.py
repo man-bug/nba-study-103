@@ -78,8 +78,8 @@ def get_league_averages(season='2023-24'):
         return None, str(e)
 
 # Function to plot bar charts for comparison
-def plot_stats(player_stats, comparison_stats, player_name, comparison_label):
-    categories = ['PPG', 'FG%', 'APG', 'RPG']
+def plot_stats(player_stats, comparison_stats, player_name, comparison_label, team_name=None):
+    categories = ['PTS', 'FG%', 'AST', 'REB']
     player_values = player_stats
     comparison_values = comparison_stats
 
@@ -88,7 +88,15 @@ def plot_stats(player_stats, comparison_stats, player_name, comparison_label):
         go.Bar(name=comparison_label, x=categories, y=comparison_values)
     ])
     fig.update_layout(barmode='group')
+    
+    # Add title based on comparison type
+    if team_name:
+        fig.update_layout(title=f'{player_name} and {team_name}')
+    else:
+        fig.update_layout(title=f'{player_name} vs {comparison_label}')
+        
     st.plotly_chart(fig)
+
 
 # Function to plot shot chart
 def plot_shot_chart(player_id, player_name, season='2023-24'):
@@ -121,49 +129,94 @@ def main():
     nba_players = players.get_active_players()
     player_names = [player['full_name'] for player in nba_players]
     selected_player1 = st.selectbox("Select first player:", player_names)
-    selected_player2 = st.selectbox("Select second player:", player_names)
+    show_second_player = st.checkbox("Show second player's information")
 
-    if selected_player1 and selected_player2:
+    if selected_player1:
         player_id1 = get_player_id(selected_player1.strip())
-        player_id2 = get_player_id(selected_player2.strip())
-        if player_id1 and player_id2:
+        if player_id1:
             player_info1 = commonplayerinfo.CommonPlayerInfo(player_id=player_id1).get_data_frames()[0]
-            player_info2 = commonplayerinfo.CommonPlayerInfo(player_id=player_id2).get_data_frames()[0]
-            if not player_info1.empty and not player_info2.empty:
+            if not player_info1.empty:
                 player_stats1 = get_player_stats(player_id1)
-                player_stats2 = get_player_stats(player_id2)
                 league_averages = get_league_averages()
 
-                if len(player_stats1) == 4 and len(player_stats2) == 4:
+                if len(player_stats1) == 4:
                     ppg1, fg_percentage1, apg1, rpg1 = player_stats1
-                    ppg2, fg_percentage2, apg2, rpg2 = player_stats2
 
                     team_id1 = player_info1['TEAM_ID'].values[0]
+                    team_name1 = teams.find_team_name_by_id(team_id1)
+                    if team_name1:
+                        team_name1 = team_name1['full_name']  # Get the full name from the dictionary
+                    else:
+                        team_name1 = "Unknown Team"
+
                     team_stats1 = get_team_stats(team_id1)
                     if len(team_stats1) == 4:
                         team_ppg1, team_fg1, team_apg1, team_rpg1 = team_stats1
 
+                        # Display player 1 headshot and comparison with team average
                         display_player_headshot(player_id1, selected_player1)
-                        display_player_headshot(player_id2, selected_player2)
-
-                        plot_stats([ppg1, fg_percentage1, apg1, rpg1], [ppg2, fg_percentage2, apg2, rpg2], selected_player1, selected_player2)
-                        plot_stats([ppg1, fg_percentage1, apg1, rpg1], [team_ppg1, team_fg1, team_apg1, team_rpg1], selected_player1, "Team Average")
+                        plot_stats([ppg1, fg_percentage1, apg1, rpg1], [team_ppg1, team_fg1, team_apg1, team_rpg1], selected_player1, team_name1)
+                        # Display player 1 comparison with league average
                         if league_averages:
                             plot_stats([ppg1, fg_percentage1, apg1, rpg1], list(league_averages), selected_player1, "League Average")
                         else:
                             st.write("Error fetching league averages.")
-                            
+                        # Display player 1 shot chart
                         plot_shot_chart(player_id1, selected_player1)
-                        
-                        plot_shot_chart(player_id2, selected_player2)
+
+                        if show_second_player:
+                            selected_player2 = st.selectbox("Select second player:", player_names)
+                            if selected_player2:
+                                player_id2 = get_player_id(selected_player2.strip())
+                                if player_id2:
+                                    player_info2 = commonplayerinfo.CommonPlayerInfo(player_id=player_id2).get_data_frames()[0]
+                                    if not player_info2.empty:
+                                        player_stats2 = get_player_stats(player_id2)
+                                        if len(player_stats2) == 4:
+                                            ppg2, fg_percentage2, apg2, rpg2 = player_stats2
+
+                                            team_id2 = player_info2['TEAM_ID'].values[0]
+                                            team_name2 = teams.find_team_name_by_id(team_id2)
+                                            if team_name2:
+                                                team_name2 = team_name2['full_name']  # Get the full name from the dictionary
+                                            else:
+                                                team_name2 = "Unknown Team"
+
+                                            team_stats2 = get_team_stats(team_id2)
+                                            if len(team_stats2) == 4:
+                                                team_ppg2, team_fg2, team_apg2, team_rpg2 = team_stats2
+
+                                                # Display player 2 headshot and comparison with team average
+                                                display_player_headshot(player_id2, selected_player2)
+                                                plot_stats([ppg2, fg_percentage2, apg2, rpg2], [team_ppg2, team_fg2, team_apg2, team_rpg2], selected_player2, team_name2)
+                                                # Display player 2 comparison with league average
+                                                if league_averages:
+                                                    plot_stats([ppg2, fg_percentage2, apg2, rpg2], list(league_averages), selected_player2, "League Average")
+                                                else:
+                                                    st.write("Error fetching league averages.")
+                                                # Display player 2 shot chart
+                                                plot_shot_chart(player_id2, selected_player2)
+                                                
+                                                # Player vs Player comparison
+                                                plot_stats([ppg1, fg_percentage1, apg1, rpg1], [ppg2, fg_percentage2, apg2, rpg2], selected_player1, selected_player2)
+                                            else:
+                                                st.write(f"Error fetching team stats for {selected_player2}: {team_stats2[1]}")
+                                        else:
+                                            st.write(f"Error fetching player stats for {selected_player2}: {player_stats2[1]}")
+                                    else:
+                                        st.write(f"Error fetching player info for {selected_player2}.")
+                                else:
+                                    st.write(f"Player {selected_player2} not found.")
+                            else:
+                                st.write("Please select a second player.")
                     else:
-                        st.write(f"Error fetching team stats: {team_stats1[1]}")
+                        st.write(f"Error fetching team stats for {selected_player1}: {team_stats1[1]}")
                 else:
-                    st.write(f"Error: {player_stats1[1] if len(player_stats1) == 2 else player_stats2[1]}")
+                    st.write(f"Error fetching player stats for {selected_player1}: {player_stats1[1]}")
             else:
-                st.write("Error fetching player info.")
+                st.write(f"Error fetching player info for {selected_player1}.")
         else:
-            st.write(f"Player {selected_player1 if not player_id1 else selected_player2} not found.")
+            st.write(f"Player {selected_player1} not found.")
 
 if __name__ == "__main__":
     main()
