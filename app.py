@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-from nba_api.stats.endpoints import commonplayerinfo, playergamelog, teamgamelog, commonteamroster, shotchartdetail, leaguegamelog
+from nba_api.stats.endpoints import commonplayerinfo, playergamelog, teamgamelog, commonteamroster, shotchartdetail, leaguegamelog, leagueleaders
 from nba_api.stats.static import players, teams
 import requests
 from PIL import Image
@@ -37,14 +37,6 @@ def display_player_headshot(player_id, player_name):
     else:
         st.write(f"Could not retrieve headshot for {player_name}.")
 
-# Function to get team roster
-def get_team_roster(team_id):
-    try:
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id).get_data_frames()[0]
-        return roster
-    except Exception as e:
-        return None
-
 # Function to get team stats
 def get_team_stats(team_id, season='2023-24'):
     try:
@@ -77,6 +69,15 @@ def get_league_averages(season='2023-24'):
     except Exception as e:
         return None, str(e)
 
+# Function to get top 5 players in various categories
+def get_top_players(category, season='2023-24'):
+    try:
+        leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation=category, season=season, season_type_all_star='Regular Season')
+        leaders_df = leaders.get_data_frames()[0].head(5)
+        return leaders_df[['PLAYER', 'TEAM', 'PTS', 'AST', 'REB', 'STL', 'BLK', 'FG_PCT', 'FG3M']]
+    except Exception as e:
+        return None, str(e)
+
 # Function to plot bar charts for comparison
 def plot_stats(player_stats, comparison_stats, player_name, comparison_label, team_name=None):
     categories = ['PTS', 'FG%', 'AST', 'REB']
@@ -96,7 +97,6 @@ def plot_stats(player_stats, comparison_stats, player_name, comparison_label, te
         fig.update_layout(title=f'{player_name} vs {comparison_label}')
         
     st.plotly_chart(fig)
-
 
 # Function to plot shot chart
 def plot_shot_chart(player_id, player_name, season='2023-24'):
@@ -217,6 +217,26 @@ def main():
                 st.write(f"Error fetching player info for {selected_player1}.")
         else:
             st.write(f"Player {selected_player1} not found.")
+    
+    # Add section for top 5 season leaders
+    st.header("Top 5 Leaders for 2023-24")
+    categories = {
+        "PTS": "Points Per Game (PPG)",
+        "AST": "Assists Per Game (APG)",
+        "REB": "Rebounds Per Game (RPG)",
+        "STL": "Steals Per Game (SPG)",
+        "BLK": "Blocks Per Game (BPG)",
+        "FG_PCT": "Field Goal Percentage (FG%)",
+        "FG3M": "3-Pointers Made"
+    }
+    
+    for category, label in categories.items():
+        st.subheader(label)
+        top_players = get_top_players(category)
+        if top_players is not None:
+            st.table(top_players[['PLAYER', 'TEAM', category]])
+        else:
+            st.write(f"Error fetching top players for {label}")
 
 if __name__ == "__main__":
     main()
