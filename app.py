@@ -5,6 +5,7 @@ from nba_api.stats.static import players, teams
 import requests
 from PIL import Image
 from io import BytesIO
+import plotly.express as px
 
 # Function to get player ID by name
 def get_player_id(player_name):
@@ -130,6 +131,37 @@ def plot_shot_chart(player_id, player_name, season='2023-24'):
     except Exception as e:
         st.write(f"Error fetching shot chart data: {e}")
 
+def plot_box_whisker(player_id, player_name, season='2023-24'):
+    try:
+        # Fetch shot chart data
+        shotchart = shotchartdetail.ShotChartDetail(
+            team_id=0,
+            player_id=player_id,
+            season_nullable=season,
+            season_type_all_star='Regular Season',
+            context_measure_simple='FGA'
+        )
+        shot_df = shotchart.get_data_frames()[0]
+
+        # Filter data to include only successful shots
+        made_shots_df = shot_df[shot_df['SHOT_MADE_FLAG'] == 1]
+
+        if made_shots_df.empty:
+            st.write(f"No made shots data available for {player_name} in {season}.")
+            return
+
+        # Create a box-and-whisker plot for the x and y coordinates of made shots
+        fig = px.box(made_shots_df, x='LOC_X', y='LOC_Y', points='all',
+                    title=f'Shot Distribution for Made Shots of {player_name} ({season})')
+        fig.update_layout(xaxis_title='Court Length', yaxis_title='Court Width')
+
+        # Display the plot
+        st.plotly_chart(fig)
+
+    except Exception as e:
+        st.write(f"Error fetching shot chart data: {e}")
+
+
 # Streamlit app
 def main():
     st.title("NBA Player Statistics Viewer")
@@ -172,6 +204,8 @@ def main():
                             st.write("Error fetching league averages.")
                         # Display player 1 shot chart
                         plot_shot_chart(player_id1, selected_player1)
+                        # Display box-and-whisker plot for player 1
+                        plot_box_whisker(player_id1, selected_player1)
 
                         if show_second_player:
                             selected_player2 = st.selectbox("Select second player:", player_names)
@@ -205,6 +239,8 @@ def main():
                                                     st.write("Error fetching league averages.")
                                                 # Display player 2 shot chart
                                                 plot_shot_chart(player_id2, selected_player2)
+                                                # Display box-and-whisker plot for player 2
+                                                plot_box_whisker(player_id2, selected_player2)
                                                 
                                                 # Player vs Player comparison
                                                 plot_stats([ppg1, fg_percentage1, apg1, rpg1], [ppg2, fg_percentage2, apg2, rpg2], selected_player1, selected_player2)
