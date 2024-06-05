@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-from nba_api.stats.endpoints import commonplayerinfo, playergamelog, teamgamelog, commonteamroster, shotchartdetail, leaguegamelog, leagueleaders
+from nba_api.stats.endpoints import commonplayerinfo, playergamelog, teamgamelog, shotchartdetail, leaguegamelog, leagueleaders
 from nba_api.stats.static import players, teams
 import requests
 from PIL import Image
@@ -13,6 +13,7 @@ def get_player_id(player_name):
     return player_dict.get(player_name, {}).get('id')
 
 # Function to fetch player stats
+@st.cache_data
 def get_player_stats(player_id, season='2023-24'):
     try:
         gamelog = playergamelog.PlayerGameLog(player_id=player_id, season=season)
@@ -38,6 +39,7 @@ def display_player_headshot(player_id, player_name):
         st.write(f"Could not retrieve headshot for {player_name}.")
 
 # Function to get team stats
+@st.cache_data
 def get_team_stats(team_id, season='2023-24'):
     try:
         team_log = teamgamelog.TeamGameLog(team_id=team_id, season=season)
@@ -54,6 +56,7 @@ def get_team_stats(team_id, season='2023-24'):
         return None, str(e)
 
 # Function to get league averages for the specified season
+@st.cache_data
 def get_league_averages(season='2023-24'):
     try:
         league_log = leaguegamelog.LeagueGameLog(season=season)
@@ -70,11 +73,17 @@ def get_league_averages(season='2023-24'):
         return None, str(e)
 
 # Function to get top 5 players in various categories
+@st.cache_data
 def get_top_players(category, season='2023-24'):
     try:
         leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation=category, season=season, season_type_all_star='Regular Season')
         leaders_df = leaders.get_data_frames()[0].head(5)
-        return leaders_df[['PLAYER', 'TEAM', 'PTS', 'AST', 'REB', 'STL', 'BLK', 'FG_PCT', 'FG3M']]
+        # Ensure that per-game values are displayed correctly
+        if category in ["PTS", "AST", "REB", "STL", "BLK"]:
+            leaders_df[category] = leaders_df[category] / leaders_df['GP']
+        elif category == "FG_PCT":
+            leaders_df[category] = leaders_df[category] * 100
+        return leaders_df[['PLAYER', 'TEAM', category]]
     except Exception as e:
         return None, str(e)
 
