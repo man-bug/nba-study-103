@@ -146,8 +146,8 @@ def plot_spider_chart(stats, player_name):
     )
     st.plotly_chart(fig)
 
-# Function to get top league players
-def get_top_league_players(category, season='2023-24'):
+# Function to get top league players for 2024-25 season
+def get_top_league_players(category, season='2024-25'):
     try:
         leaders = leagueleaders.LeagueLeaders(
             stat_category_abbreviation=category, 
@@ -155,6 +155,11 @@ def get_top_league_players(category, season='2023-24'):
             season_type_all_star='Regular Season'
         )
         leaders_df = leaders.get_data_frames()[0].head(10)  # Top 10 players
+        # Convert totals to per-game stats if applicable
+        if category in ['PTS', 'AST', 'REB', 'STL', 'BLK']:
+            leaders_df[category] = leaders_df[category] / leaders_df['GP']
+        elif category == 'FG_PCT':
+            leaders_df[category] = leaders_df[category] * 100  # Convert to percentage
         return leaders_df[['PLAYER', 'TEAM', category]]
     except Exception as e:
         return None
@@ -239,8 +244,8 @@ def main():
                         )
                         st.plotly_chart(comparison_fig)
 
-                        # Top league players in various categories
-                        st.write("### League Player Rankings")
+                        # Top league players in various categories for 2024-25 season
+                        st.write("### League Player Rankings (2024-2025 Season)")
                         categories = {
                             "PTS": "Points Per Game (PPG)",
                             "AST": "Assists Per Game (APG)",
@@ -248,7 +253,7 @@ def main():
                         }
                         for category, label in categories.items():
                             st.subheader(label)
-                            top_players = get_top_league_players(category)
+                            top_players = get_top_league_players(category, season='2024-25')
                             if top_players is not None:
                                 st.table(top_players)
                             else:
