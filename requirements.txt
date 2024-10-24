@@ -1,5 +1,7 @@
 streamlit
 plotly
-nba_api
-requests
+nba-api
+scikit-learn
+pandas
+numpy
 Pillow
