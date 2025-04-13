@@ -1,6 +1,5 @@
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
 from nba_api.stats.endpoints import playergamelog, commonplayerinfo, shotchartdetail, leagueleaders
 from nba_api.stats.static import players, teams
 from sklearn.ensemble import RandomForestRegressor
@@ -12,101 +11,85 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-# Function to get player ID by name
+# Constants
+DEFAULT_SEASON = '2024-25'
+
+# --- Utility Functions ---
+
 def get_player_id(player_name):
     nba_players = players.get_active_players()
     player_dict = {player['full_name']: player for player in nba_players}
     return player_dict.get(player_name, {}).get('id')
 
-# Improved function to fetch player stats with consistent return
 @st.cache_data
-def get_player_stats(player_id, season='2023-24'):
+def get_player_stats(player_id, season=DEFAULT_SEASON):
     try:
         gamelog = playergamelog.PlayerGameLog(player_id=player_id, season=season)
-        gamelog_df = gamelog.get_data_frames()[0]
-        if gamelog_df.empty:
-            return None, "No games played in the selected season."
-        return gamelog_df, None  # Return DataFrame and None for error
+        df = gamelog.get_data_frames()[0]
+        return (df, None) if not df.empty else (None, "No games played in the selected season.")
     except Exception as e:
-        return None, str(e)  # Return None and the error message if an exception occurs
+        return None, str(e)
 
-# Function to train a Random Forest model
 def train_random_forest(data):
-    # Prepare data
     data['GameNumber'] = np.arange(len(data)) + 1
     features = ['GameNumber', 'FGM', 'FGA', 'REB', 'AST', 'STL', 'BLK', 'TOV']
-    target = 'PTS'
-    
-    # Split data
     X = data[features]
-    y = data[target]
-    
+    y = data['PTS']
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # Train Random Forest
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
-    
-    # Predict and evaluate
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
+    mse = mean_squared_error(y_test, model.predict(X_test))
     return model, mse
 
-# Function to make predictions with the trained model
 def predict_next_game(model, data):
-    next_game = pd.DataFrame({
-        'GameNumber': [data['GameNumber'].max() + 1],
-        'FGM': [data['FGM'].mean()],
-        'FGA': [data['FGA'].mean()],
-        'REB': [data['REB'].mean()],
-        'AST': [data['AST'].mean()],
-        'STL': [data['STL'].mean()],
-        'BLK': [data['BLK'].mean()],
-        'TOV': [data['TOV'].mean()]
-    })
-    predicted_points = model.predict(next_game)
-    return predicted_points[0]
+    next_input = {
+        'GameNumber': data['GameNumber'].max() + 1,
+        'FGM': data['FGM'].mean(),
+        'FGA': data['FGA'].mean(),
+        'REB': data['REB'].mean(),
+        'AST': data['AST'].mean(),
+        'STL': data['STL'].mean(),
+        'BLK': data['BLK'].mean(),
+        'TOV': data['TOV'].mean()
+    }
+    prediction = model.predict(pd.DataFrame([next_input]))
+    return prediction[0]
 
-# Function to display player headshot
 def display_player_headshot(player_id, player_name):
     url = f"https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/{player_id}.png"
     response = requests.get(url)
     if response.status_code == 200:
         image = Image.open(BytesIO(response.content))
-        st.image(image, caption=player_name, use_column_width=False)
+        st.image(image, caption=player_name, use_container_width=True)
     else:
         st.write(f"Could not retrieve headshot for {player_name}.")
 
-# Function to get a player's current team
 def get_player_team(player_id):
     try:
-        player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_data_frames()[0]
-        if not player_info.empty:
-            team_id = player_info['TEAM_ID'].values[0]
-            team_name = teams.find_team_name_by_id(team_id)
-            return team_name['full_name'] if team_name else "Unknown Team"
-        return "Unknown Team"
-    except Exception as e:
-        return "Unknown Team"
+        df = commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_data_frames()[0]
+        if not df.empty:
+            team_id = df['TEAM_ID'].iloc[0]
+            team = teams.find_team_name_by_id(team_id)
+            return team['full_name'] if team else "Unknown Team"
+    except:
+        pass
+    return "Unknown Team"
 
-# Function to plot shot chart
-def plot_shot_chart(player_id, player_name, season='2023-24'):
+def plot_shot_chart(player_id, player_name, season=DEFAULT_SEASON):
     try:
-        shotchart = shotchartdetail.ShotChartDetail(
-            team_id=0, 
-            player_id=player_id, 
-            season_nullable=season, 
-            season_type_all_star='Regular Season', 
+        chart = shotchartdetail.ShotChartDetail(
+            team_id=0, player_id=player_id,
+            season_nullable=season, season_type_all_star='Regular Season',
             context_measure_simple='FGA'
         )
-        shot_df = shotchart.get_data_frames()[0]
+        df = chart.get_data_frames()[0]
 
         fig = go.Figure()
         for made in [1, 0]:
-            shot_data = shot_df[shot_df['SHOT_MADE_FLAG'] == made]
+            subset = df[df['SHOT_MADE_FLAG'] == made]
             fig.add_trace(go.Scatter(
-                x=shot_data['LOC_X'], 
-                y=shot_data['LOC_Y'], 
+                x=subset['LOC_X'], y=subset['LOC_Y'],
                 mode='markers',
                 marker=dict(color='green' if made else 'red'),
                 name='Made' if made else 'Missed'
@@ -114,158 +97,125 @@ def plot_shot_chart(player_id, player_name, season='2023-24'):
 
         fig.update_layout(
             title=f'Shot Chart for {player_name} ({season})',
-            xaxis_title='Court Length',
-            yaxis_title='Court Width'
+            xaxis_title='Court Length', yaxis_title='Court Width'
         )
         st.plotly_chart(fig)
     except Exception as e:
-        st.write(f"Error fetching shot chart data: {e}")
+        st.write(f"Shot chart error: {e}")
 
-# Function to display a spider chart of key stats
 def plot_spider_chart(stats, player_name):
     categories = ['Points', 'Assists', 'Rebounds', 'Steals', 'Blocks', 'Turnovers']
     values = [
-        stats['PTS'].mean(),
-        stats['AST'].mean(),
-        stats['REB'].mean(),
-        stats['STL'].mean(),
-        stats['BLK'].mean(),
-        stats['TOV'].mean()
+        stats['PTS'].mean(), stats['AST'].mean(), stats['REB'].mean(),
+        stats['STL'].mean(), stats['BLK'].mean(), stats['TOV'].mean()
     ]
-    
     fig = go.Figure(data=go.Scatterpolar(
-        r=values + values[:1],  # Close the loop
+        r=values + values[:1],
         theta=categories + categories[:1],
-        fill='toself',
-        name=player_name
+        fill='toself', name=player_name
     ))
     fig.update_layout(
         title=f"Spider Chart of Key Stats for {player_name}",
-        polar=dict(radialaxis=dict(visible=True)),
-        showlegend=True
+        polar=dict(radialaxis=dict(visible=True)), showlegend=True
     )
     st.plotly_chart(fig)
 
-# Function to get top league players for 2024-25 season
-def get_top_league_players(category, season='2024-25'):
+def get_top_league_players(category, season=DEFAULT_SEASON):
     try:
         leaders = leagueleaders.LeagueLeaders(
-            stat_category_abbreviation=category, 
-            season=season, 
-            season_type_all_star='Regular Season'
+            stat_category_abbreviation=category,
+            season=season, season_type_all_star='Regular Season'
         )
-        leaders_df = leaders.get_data_frames()[0].head(10)  # Top 10 players
-        # Convert totals to per-game stats if applicable
+        df = leaders.get_data_frames()[0].head(10)
         if category in ['PTS', 'AST', 'REB', 'STL', 'BLK']:
-            leaders_df[category] = leaders_df[category] / leaders_df['GP']
+            df[category] = df[category] / df['GP']
         elif category == 'FG_PCT':
-            leaders_df[category] = leaders_df[category] * 100  # Convert to percentage
-        return leaders_df[['PLAYER', 'TEAM', category]]
-    except Exception as e:
+            df[category] *= 100
+        return df[['PLAYER', 'TEAM', category]]
+    except:
         return None
 
-# Streamlit app
-def main():
-    st.title("NBA Player Performance Prediction - 2023-2024 Season")
+# --- Main App ---
 
-    # Dropdown for player selection
+def main():
+    st.title("🏀 NBA Player Performance Prediction - 2024-2025")
+
     nba_players = players.get_active_players()
-    player_names = [player['full_name'] for player in nba_players]
+    player_names = sorted([p['full_name'] for p in nba_players])
     selected_player = st.selectbox("Select a player to predict performance:", player_names)
 
-    if selected_player:
-        player_id = get_player_id(selected_player.strip())
-        if player_id:
-            player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_data_frames()[0]
-            if not player_info.empty:
-                gamelog_df, error = get_player_stats(player_id, season='2023-24')
-                if gamelog_df is not None:
-                    if len(gamelog_df) >= 10:  # Ensure enough data for training
-                        # Get the team for the 2024-2025 season
-                        team_name = get_player_team(player_id)
-                        st.write(f"**{selected_player} will be playing for {team_name} in the 2024-2025 season.**")
+    if not selected_player:
+        return
 
-                        # Train the Random Forest model
-                        model, mse = train_random_forest(gamelog_df)
-                        st.write(f"Model Mean Squared Error: {mse:.2f}")
+    player_id = get_player_id(selected_player)
+    if not player_id:
+        st.warning(f"Player {selected_player} not found.")
+        return
 
-                        # Predict next game's points
-                        predicted_pts = predict_next_game(model, gamelog_df)
-                        st.write(f"Predicted Points for Next Game: {predicted_pts:.2f}")
+    player_info = commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_data_frames()[0]
+    if player_info.empty:
+        st.warning("Could not load player information.")
+        return
 
-                        # Display player headshot
-                        display_player_headshot(player_id, selected_player)
+    gamelog_df, error = get_player_stats(player_id)
+    if gamelog_df is None:
+        st.error(f"Error fetching stats: {error}")
+        return
 
-                        # Visualization of recent game data with labeled axes
-                        st.write("### Recent Game Performance")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=gamelog_df['GameNumber'], y=gamelog_df['PTS'], mode='lines+markers', name='Points'))
-                        fig.update_layout(
-                            title='Recent Game Performance',
-                            xaxis_title='Game Number',
-                            yaxis_title='Points Scored',
-                            showlegend=True
-                        )
-                        st.plotly_chart(fig)
+    if len(gamelog_df) < 10:
+        st.warning("Not enough data to train model.")
+        return
 
-                        # Plot the shot chart
-                        st.write("### Shot Chart")
-                        plot_shot_chart(player_id, selected_player, season='2023-24')
+    team_name = get_player_team(player_id)
+    st.success(f"{selected_player} will be playing for **{team_name}** in {DEFAULT_SEASON}.")
 
-                        # Spider chart of key stats
-                        st.write("### Key Stats Spider Chart")
-                        plot_spider_chart(gamelog_df, selected_player)
+    model, mse = train_random_forest(gamelog_df)
+    st.metric("Model Mean Squared Error", f"{mse:.2f}")
 
-                        # Additional visuals: Field Goal Percentage over time
-                        st.write("### Field Goal Percentage Over Time")
-                        fig_fg = go.Figure()
-                        gamelog_df['FG%'] = (gamelog_df['FGM'] / gamelog_df['FGA']) * 100
-                        fig_fg.add_trace(go.Scatter(x=gamelog_df['GameNumber'], y=gamelog_df['FG%'], mode='lines+markers', name='FG%'))
-                        fig_fg.update_layout(
-                            title='Field Goal Percentage Over Time',
-                            xaxis_title='Game Number',
-                            yaxis_title='Field Goal Percentage (%)',
-                            showlegend=True
-                        )
-                        st.plotly_chart(fig_fg)
+    predicted_pts = predict_next_game(model, gamelog_df)
+    st.metric("Predicted Points for Next Game", f"{predicted_pts:.2f}")
 
-                        # Visualization: Comparison of Points, Assists, and Rebounds
-                        st.write("### Points, Assists, and Rebounds Comparison")
-                        comparison_fig = go.Figure()
-                        comparison_fig.add_trace(go.Bar(x=['Points', 'Assists', 'Rebounds'], y=[
-                            gamelog_df['PTS'].mean(),
-                            gamelog_df['AST'].mean(),
-                            gamelog_df['REB'].mean()
-                        ], name='Average Stats', marker_color='blue'))
-                        comparison_fig.update_layout(
-                            title='Average Points, Assists, and Rebounds',
-                            yaxis_title='Average per Game',
-                            xaxis_title='Stat Category'
-                        )
-                        st.plotly_chart(comparison_fig)
+    display_player_headshot(player_id, selected_player)
 
-                        # Top league players in various categories for 2024-25 season
-                        st.write("### League Player Rankings (2024-2025 Season)")
-                        categories = {
-                            "PTS": "Points Per Game (PPG)",
-                            "AST": "Assists Per Game (APG)",
-                            "REB": "Rebounds Per Game (RPG)"
-                        }
-                        for category, label in categories.items():
-                            st.subheader(label)
-                            top_players = get_top_league_players(category, season='2024-25')
-                            if top_players is not None:
-                                st.table(top_players)
-                            else:
-                                st.write(f"Error fetching top players for {label}")
-                    else:
-                        st.write("Not enough game data to train a predictive model.")
-                else:
-                    st.write(f"Error fetching player stats: {error}")
-            else:
-                st.write(f"Error fetching player info for {selected_player}.")
+    # Visualizations
+    st.subheader("📊 Game Performance")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=gamelog_df['GameNumber'], y=gamelog_df['PTS'], mode='lines+markers', name='Points'))
+    fig.update_layout(title='Game-by-Game Scoring', xaxis_title='Game Number', yaxis_title='Points')
+    st.plotly_chart(fig)
+
+    st.subheader("🎯 Shot Chart")
+    plot_shot_chart(player_id, selected_player)
+
+    st.subheader("🕸️ Key Stats Spider Chart")
+    plot_spider_chart(gamelog_df, selected_player)
+
+    st.subheader("📈 Field Goal % Over Time")
+    gamelog_df['FG%'] = (gamelog_df['FGM'] / gamelog_df['FGA']) * 100
+    fig_fg = go.Figure()
+    fig_fg.add_trace(go.Scatter(x=gamelog_df['GameNumber'], y=gamelog_df['FG%'], mode='lines+markers'))
+    fig_fg.update_layout(title='Field Goal % Over Time', xaxis_title='Game', yaxis_title='FG%')
+    st.plotly_chart(fig_fg)
+
+    st.subheader("📊 Avg Points, Assists, Rebounds")
+    comp_fig = go.Figure()
+    comp_fig.add_trace(go.Bar(
+        x=['Points', 'Assists', 'Rebounds'],
+        y=[gamelog_df['PTS'].mean(), gamelog_df['AST'].mean(), gamelog_df['REB'].mean()],
+        name='Averages'
+    ))
+    comp_fig.update_layout(title='Average Performance', yaxis_title='Per Game')
+    st.plotly_chart(comp_fig)
+
+    st.subheader("🏅 League Leaders (2024-2025)")
+    categories = {"PTS": "Points Per Game", "AST": "Assists Per Game", "REB": "Rebounds Per Game"}
+    for cat, label in categories.items():
+        st.markdown(f"**{label}**")
+        top_players = get_top_league_players(cat)
+        if top_players is not None:
+            st.dataframe(top_players, use_container_width=True)
         else:
-            st.write(f"Player {selected_player} not found.")
+            st.write("Unable to load leaderboard data.")
 
 if __name__ == "__main__":
     main()
